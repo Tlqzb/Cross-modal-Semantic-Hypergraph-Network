@@ -14,16 +14,16 @@ DroneVehicle	61.6%	31.6%	Zero-shot from M3FD
 Visualizations
 Grad-CAM Activation Heatmaps — VEDAI
 Incremental effect of each module from baseline to full CSHNet.
-![Heatmap VEDAI](docs/heatmap_vedai.png)
+![Heatmap VEDAI](docs/Heatmapvedai.png)
 Grad-CAM Activation Heatmaps — M3FD
-![Heatmap M3FD](docs/heatmap_m3fd.png)
+![Heatmap M3FD](docs/Heatmapm3fd.png)
 Detection Results — VEDAI
 Comparison with LFMDet, DPAL-R, SuperYOLO, and baseline.
-![Detection VEDAI](docs/detect_vedai.png)
+![Detection VEDAI](docs/Detectvedai.png)
 Detection Results — M3FD
-![Detection M3FD](docs/detect_m3fd.png)
+![Detection M3FD](docs/Detect m3fd.png)
 Detection Results — DroneVehicle (Zero-shot)
-![Detection DroneVehicle](docs/detect_dronev.png)
+![Detection DroneVehicle](docs/Detectdronev.png)
 Requirements
 ```
 Python >= 3.10
