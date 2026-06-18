@@ -1,0 +1,177 @@
+# RT-DETR-r18 MultiModal — Full（五个创新点完整版）
+#
+# 合并来源：
+#   rtdetr-r18-mm-cafm.yaml        → 【改动①】CAFM_Fusion（P3跨模态融合点）
+#   rtdetr-r18-mm-mid-enhanced-v2  → 【改动②】C2f_DCMB（P5精炼）
+#                                     【改动③】HyperACE（FPN P4聚合）
+#                                     【改动④】FullPAD_Tunnel ×4（FPN/PAN旁路）
+#                                     【改动⑤】HAFB ×3（Decoder入口增强）
+#   rtdetr-r18-mm-mid-wca.yaml     → 【改动⑥】TransformerEncoderLayer_WCA（替换AIFI）
+#
+# ═══════════════════════════════════════════════════════════
+# 六个改动位置总览
+# ═══════════════════════════════════════════════════════════
+#
+# 【改动①】层12  CAFM_Fusion                    ← 原 Concat+Conv 两行合并为一行
+#   P3 跨模态融合点：RGB P3（层9）与红外 P3（层11）通过跨模态交叉注意力融合
+#   机制：通道描述子矩阵乘法构造相关矩阵 → 互相重写对方通道 → 空间注意力精炼
+#   替换：原 [[9,11], Concat] + [-1, Conv 1×1]
+#
+# 【改动②】层15  C2f_DCMB                       ← backbone P5出口新增
+#   P5特征精炼：送编码器前提升特征质量
+#
+# 【改动③】层17  TransformerEncoderLayer_WCA    ← 原 AIFI
+#   小波交叉注意力编码器：Haar小波分解 → 高低频MSCW门控 → 原型注意力
+#   针对 VEDAI（红外低频/RGB高频异构）和 M3FD（夜间高频衰减）的频域感知
+#
+# 【改动④】层21  HyperACE                       ← 原 FPN P4 Concat
+#   FPN P5→P4聚合：同时感知P3/P4/P5三尺度，替换简单拼接
+#
+# 【改动⑤】层23/29/33/37  FullPAD_Tunnel ×4    ← FPN/PAN每个RepC3后新增
+#   特征直通旁路：防止多次聚合导致原始信息丢失
+#
+# 【改动⑥】层38/39/40  HAFB ×3                 ← Decoder入口新增
+#   backbone原始特征 + neck输出在Decoder前最终融合
+#   P3: CAFM输出(层12) + FullPAD增强P3(层29)
+#   P4: backbone_P4(层13) + FullPAD增强P4(层33)
+#   P5: Y5(层18) + FullPAD增强P5(层37)
+#
+# ═══════════════════════════════════════════════════════════
+# 层号速查表（共41层，层0–40）
+# ═══════════════════════════════════════════════════════════
+#   0–3   RGB stem (ConvNormLayer×3 + MaxPool)
+#   4–7   X红外 stem (ConvNormLayer×3 + MaxPool)
+#   8–9   RGB Stage2+3 (BasicBlock P3/8)
+#   10–11 X Stage2+3 (BasicBlock P3/8)
+#   12    CAFM_Fusion → Fused_P3 256ch        ★改动①
+#   13    Blocks P4/16  256ch
+#   14    Blocks P5/32  512ch
+#   15    C2f_DCMB 512ch                      ★改动②
+#   16    Conv input_proj.2  256ch
+#   17    TransformerEncoderLayer_WCA 256ch   ★改动③
+#   18    Conv Y5  256ch
+#   19    Upsample
+#   20    Conv input_proj.1(P4)  256ch
+#   21    HyperACE(Fused_P3, P4proj, P5up)   ★改动④
+#   22    RepC3 fpn_blocks.0
+#   23    FullPAD_Tunnel P4旁路               ★改动⑤-a
+#   24    Conv Y4
+#   25    Upsample
+#   26    Conv input_proj.0(Fused_P3)
+#   27    Concat
+#   28    RepC3 fpn_blocks.1
+#   29    FullPAD_Tunnel P3旁路               ★改动⑤-b
+#   30    Conv PAN下采样
+#   31    Concat
+#   32    RepC3 pan_blocks.0
+#   33    FullPAD_Tunnel PAN P4旁路           ★改动⑤-c
+#   34    Conv PAN下采样
+#   35    Concat
+#   36    RepC3 pan_blocks.1
+#   37    FullPAD_Tunnel PAN P5旁路           ★改动⑤-d
+#   38    HAFB P3最终增强                     ★改动⑥-a
+#   39    HAFB P4最终增强                     ★改动⑥-b
+#   40    HAFB P5最终增强                     ★改动⑥-c
+#   41    RTDETRDecoder → Detect(P3,P4,P5)
+
+nc: 80
+scales:
+  l: [1.00, 1.00, 1024]
+
+backbone:
+
+  # ── RGB stem ──────────────────────────────────────────
+  - [-1, 1, ConvNormLayer, [32, 3, 2, None, False, 'relu'], 'RGB']  # 0  P1/2
+  - [-1, 1, ConvNormLayer, [32, 3, 1, None, False, 'relu']]         # 1
+  - [-1, 1, ConvNormLayer, [64, 3, 1, None, False, 'relu']]         # 2
+  - [-1, 1, nn.MaxPool2d,  [3, 2, 1]]                               # 3  P2/4
+
+  # ── X 红外 stem ────────────────────────────────────────
+  - [-1, 1, ConvNormLayer, [32, 3, 2, None, False, 'relu'], 'X']    # 4  P1/2
+  - [-1, 1, ConvNormLayer, [32, 3, 1, None, False, 'relu']]         # 5
+  - [-1, 1, ConvNormLayer, [64, 3, 1, None, False, 'relu']]         # 6
+  - [-1, 1, nn.MaxPool2d,  [3, 2, 1]]                               # 7  P2/4
+
+  # ── RGB ResNet18 ───────────────────────────────────────
+  - [3,  1, Blocks, [64,  BasicBlock, 2, 2, 'relu']]                # 8  RGB Stage2
+  - [-1, 1, Blocks, [128, BasicBlock, 2, 3, 'relu']]                # 9  RGB P3/8 128ch
+
+  # ── X ResNet18 ─────────────────────────────────────────
+  - [7,  1, Blocks, [64,  BasicBlock, 2, 2, 'relu']]                # 10 X Stage2
+  - [-1, 1, Blocks, [128, BasicBlock, 2, 3, 'relu']]                # 11 X P3/8 128ch
+
+  # ── ★改动① P3跨模态融合：CAFM_Fusion ─────────────────
+  # 原版两行（Concat + Conv）合并为一行
+  # in_channels=[128,128] 由框架从层9/11自动推断，out_channel=256 显式指定
+  - [[9, 11], 1, CAFM_Fusion, [256]]                                # 12 Fused_P3 256ch
+
+  # ── 融合后 P4/P5 ──────────────────────────────────────
+  - [-1, 1, Blocks, [256, BasicBlock, 2, 4, 'relu']]                # 13 P4/16 256ch
+  - [-1, 1, Blocks, [512, BasicBlock, 2, 5, 'relu']]                # 14 P5/32 512ch
+
+  # ── ★改动② P5精炼：C2f_DCMB ───────────────────────────
+  - [-1, 1, C2f_DCMB, [512]]                                        # 15 P5精炼 512ch
+
+head:
+
+  # ── input_proj.2 ──────────────────────────────────────
+  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]                   # 16 512→256
+
+  # ── ★改动③ WCA编码器：替换AIFI ────────────────────────
+  # Haar小波分解高低频子带 → MSCW门控加权 → 原型注意力
+  # 针对VEDAI红外低频/RGB高频的频率异构和M3FD夜间高频衰减
+  - [-1, 1, TransformerEncoderLayer_WCA, [1024]]                    # 17 WCA 256ch
+
+  - [-1, 1, Conv, [256, 1, 1]]                                      # 18 Y5 256ch
+
+  # ── FPN P5→P4 ─────────────────────────────────────────
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]                      # 19 P5上采样
+  - [13, 1, Conv, [256, 1, 1, None, 1, 1, False]]                   # 20 input_proj.1(P4) 256ch
+
+  # ── ★改动④ HyperACE：三尺度聚合 ──────────────────────
+  # 输入：Fused_P3(层12) + P4_proj(层20) + P5_up(层19)
+  # 同时感知三尺度，替换原来仅做P5/P4二路的Concat
+  - [[12, 20, 19], 1, HyperACE, [256, 8, True, True, 0.5, 1, "both"]]  # 21 HyperACE
+
+  - [-1, 3, RepC3, [256, 0.5]]                                      # 22 fpn_blocks.0
+
+  # ── ★改动⑤-a FullPAD_Tunnel FPN P4旁路 ───────────────
+  - [[-1, 21], 1, FullPAD_Tunnel, []]                               # 23 P4旁路
+  - [-1, 1, Conv, [256, 1, 1]]                                      # 24 Y4
+
+  # ── FPN P4→P3 ─────────────────────────────────────────
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]                      # 25
+  - [12, 1, Conv, [256, 1, 1, None, 1, 1, False]]                   # 26 input_proj.0(Fused_P3)
+  - [[-2, -1], 1, Concat, [1]]                                      # 27
+  - [-1, 3, RepC3, [256, 0.5]]                                      # 28 fpn_blocks.1
+
+  # ── ★改动⑤-b FullPAD_Tunnel FPN P3旁路 ───────────────
+  - [[-1, 26], 1, FullPAD_Tunnel, []]                               # 29 P3旁路
+
+  # ── PAN P3→P4 ─────────────────────────────────────────
+  - [-1, 1, Conv, [256, 3, 2]]                                      # 30
+  - [[-1, 24], 1, Concat, [1]]                                      # 31
+  - [-1, 3, RepC3, [256, 0.5]]                                      # 32 pan_blocks.0
+
+  # ── ★改动⑤-c FullPAD_Tunnel PAN P4旁路 ───────────────
+  - [[-1, 23], 1, FullPAD_Tunnel, []]                               # 33 PAN P4旁路
+
+  # ── PAN P4→P5 ─────────────────────────────────────────
+  - [-1, 1, Conv, [256, 3, 2]]                                      # 34
+  - [[-1, 18], 1, Concat, [1]]                                      # 35
+  - [-1, 3, RepC3, [256, 0.5]]                                      # 36 pan_blocks.1
+
+  # ── ★改动⑤-d FullPAD_Tunnel PAN P5旁路 ───────────────
+  - [[-1, 18], 1, FullPAD_Tunnel, []]                               # 37 PAN P5旁路
+
+  # ── ★改动⑥ HAFB：Decoder入口backbone+neck最终融合 ─────
+  # 让Decoder同时看到backbone浅层原始信息和neck深层处理信息
+  # P3: CAFM输出(12) + FullPAD增强P3(29)
+  - [[12, 29], 1, HAFB, [256, True]]                                # 38 P3最终增强
+  # P4: backbone P4(13) + FullPAD增强P4(33)
+  - [[13, 33], 1, HAFB, [256, False]]                               # 39 P4最终增强
+  # P5: Y5(18) + FullPAD增强P5(37)
+  - [[18, 37], 1, HAFB, [256, False]]                               # 40 P5最终增强
+
+  # ── RTDETRDecoder ─────────────────────────────────────
+  - [[38, 39, 40], 1, RTDETRDecoder, [nc, 256, 300, 4, 8, 3]]       # 41 Detect(P3,P4,P5)
