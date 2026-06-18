@@ -38,9 +38,9 @@ Dataset Preparation
 Organize your dataset in the following structure:
 ```
 datasets/
-└── M3FD_split/
+└── M3FD\_split/
     ├── images/       # RGB images
-    ├── images_ir/    # Infrared images
+    ├── images\_ir/    # Infrared images
     └── labels/
 ```
 Update the `path` field in `ultralytics/cfg/datasets/mmdata/data.yaml` to your local dataset root.
@@ -69,8 +69,8 @@ from ultralytics import RTDETRMM
 
 model = RTDETRMM('path/to/best.pt')
 model.predict(
-    rgb_source='path/to/rgb_image.png',
-    x_source='path/to/ir_image.png',
+    rgb\_source='path/to/rgb\_image.png',
+    x\_source='path/to/ir\_image.png',
     save=True
 )
 ```
