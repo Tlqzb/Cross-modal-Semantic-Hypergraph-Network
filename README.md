@@ -1,72 +1,50 @@
-# CSHNet: Cross-modal Semantic Hypergraph Network for UAV Multimodal Object Detection
-
-A dual-stream RGB + thermal infrared object detection framework built on RT-DETR-R18, designed for UAV aerial imagery.
-
-## Overview
-
-CSHNet introduces four core modules to address cross-modal semantic alignment and feature fusion challenges in multimodal UAV detection:
-
-- **CSAM** (Cross-modal Semantic Alignment Module): aligns semantic representations between RGB and infrared streams
-- **PGRM** (Progressive Gated Recalibration Module): recalibrates cross-modal features through gated mechanisms
-- **HGAM** (Hypergraph-guided Aggregation Module): constructs hypergraph structures to model high-order cross-modal relationships
-- **HFIM** (Hierarchical Feature Integration Module): integrates multi-scale features across modalities
-
-## Datasets
-
-| Dataset | Modalities | Classes | Description |
-|---------|-----------|---------|-------------|
-| M3FD | RGB + Infrared | 6 (People, Car, Bus, Motorcycle, Lamp, Truck) | UAV multimodal detection |
-| VEDAI | RGB + Infrared | — | Vehicle detection in aerial imagery |
-| DroneVehicle | RGB + Infrared | — | UAV vehicle detection |
-
-## Results
-
-| Dataset | mAP50 | mAP50:95 |
-|---------|-------|----------|
-| M3FD | 60.2% | — |
-| VEDAI | 82.5% | — |
-| DroneVehicle (zero-shot) | 61.6% | 31.6% |
-
-## Requirements
-
+CSHNet: Cross-modal Semantic Hypergraph Network for UAV Multimodal Object Detection
+> RGB-T object detection framework for UAV remote sensing, built on RT-DETR-R18.
+Overview
+CSHNet addresses four structural limitations of existing dual-stream detectors through four targeted modules:
+CSAM — establishes cross-modal semantic correspondence at P3 via bidirectional channel cross-attention and spatial attention refinement
+PGRM — replaces the spatial-domain encoder with Haar wavelet subband decomposition and prototype-guided residual modulation
+HGAM — models high-order non-adjacent cross-scale dependencies via hypergraph convolution (HCSE), with DRFM top-level refinement and GRFM gated bypass connections
+HFIM — integrates backbone- and encoder-retained features with neck-enhanced outputs at the decoder entry across P3/P4/P5
+Results
+Dataset	mAP50	mAP50:95	Notes
+M3FD	60.2%	38.8%	—
+VEDAI	82.5%	55.1%	—
+DroneVehicle	61.6%	31.6%	Zero-shot from M3FD
+Visualizations
+Grad-CAM Activation Heatmaps — VEDAI
+Incremental effect of each module from baseline to full CSHNet.
+![Heatmap VEDAI](docs/heatmap_vedai.png)
+Grad-CAM Activation Heatmaps — M3FD
+![Heatmap M3FD](docs/heatmap_m3fd.png)
+Detection Results — VEDAI
+Comparison with LFMDet, DPAL-R, SuperYOLO, and baseline.
+![Detection VEDAI](docs/detect_vedai.png)
+Detection Results — M3FD
+![Detection M3FD](docs/detect_m3fd.png)
+Detection Results — DroneVehicle (Zero-shot)
+![Detection DroneVehicle](docs/detect_dronev.png)
+Requirements
 ```
 Python >= 3.10
 PyTorch >= 2.0
 CUDA >= 11.8
-ultralytics
 ```
-
 Install dependencies:
-
 ```bash
 pip install -r requirements.txt
 ```
-
-## Dataset Preparation
-
+Dataset Preparation
 Organize your dataset in the following structure:
-
 ```
 datasets/
 └── M3FD_split/
-    ├── images/
-    │   ├── train/
-    │   ├── val/
-    │   └── test/
-    ├── images_ir/
-    │   ├── train/
-    │   ├── val/
-    │   └── test/
+    ├── images/       # RGB images
+    ├── images_ir/    # Infrared images
     └── labels/
-        ├── train/
-        ├── val/
-        └── test/
 ```
-
-Then update the `path` field in `ultralytics/cfg/datasets/mmdata/data.yaml` to your local dataset root.
-
-## Training
-
+Update the `path` field in `ultralytics/cfg/datasets/mmdata/data.yaml` to your local dataset root.
+Training
 ```python
 from ultralytics import RTDETRMM
 
@@ -80,17 +58,12 @@ model.train(
     name='CSHNet'
 )
 ```
-
 Or run directly:
-
 ```bash
 python trainRT.py
 ```
-
-## Inference
-
+Inference
 Dual-modal inference (RGB + Infrared):
-
 ```python
 from ultralytics import RTDETRMM
 
@@ -101,31 +74,22 @@ model.predict(
     save=True
 )
 ```
-
-Single-modal inference is also supported by setting the unused modality to `None`.
-
-## Model Architecture
-
-The full model configuration is defined in `CSHNet.yaml`. Module-level configurations are available in:
-
-- `CSAM.yaml` — Cross-modal Semantic Alignment Module
-- `PGRM.yaml` — Progressive Gated Recalibration Module
-- `HGAM.yaml` — Hypergraph-guided Aggregation Module
-- `HFIM.yaml` — Hierarchical Feature Integration Module
-
-## Citation
-
-If you find this work useful, please cite our paper:
-
+Single-modal inference is supported by setting the unused modality to `None`.
+Model Configurations
+File	Description
+`CSHNet.yaml`	Full model architecture
+`CSAM.yaml`	Cross-modal Semantic Alignment Module
+`PGRM.yaml`	Prototype Guided Residual Modulation
+`HGAM.yaml`	Hypergraph Guided Aggregation Module
+`HFIM.yaml`	Hierarchical Feature Integration Module
+Citation
 ```bibtex
 @article{cshnet2025,
-  title={CSHNet: Cross-modal Semantic Hypergraph Network for UAV Multimodal Object Detection},
-  author={},
+  title={Cross-modal Semantic Hypergraph Network for RGB-T Object Detection in UAV Remote Sensing},
+  author={Qi Tian and Tingyao Jiang and Hao Zhang},
   journal={},
   year={2025}
 }
 ```
-
-## Acknowledgements
-
-This codebase is built upon [Ultralytics](https://github.com/ultralytics/ultralytics). We thank the authors for their excellent framework.
+Acknowledgements
+Built upon Ultralytics. Datasets: M3FD, VEDAI, DroneVehicle.
